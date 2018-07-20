@@ -1,2 +1,15 @@
 # imgui-ovr
 Experimenting with ImGui and Oculus SDK
+
+## Dependencies
+- [GLAD](http://glad.dav1d.de/#profile=compatibility&specification=gl&api=gl%3D4.3&api=gles1%3Dnone&api=gles2%3Dnone&api=glsc2%3Dnone&language=c&loader=on)
+	- Download as ZIP and extract in repo root
+- GLFW
+	- Download Win32 binaries and extract `lib-vc2015/glfw3.dll` and `lib-vc2015/glfw3dll.lib` to `./deps`
+- GLM
+	- Download and extract to `./include`
+
+## Quick-start
+1. Clone the repo
+2. Install dependencies as above
+3. Build and run

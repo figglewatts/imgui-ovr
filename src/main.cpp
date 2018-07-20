@@ -1,11 +1,12 @@
-#include <glad/glad.h>
-#include <GLFW/glfw3.h>
+#include "GL.h"
 
 #include <iostream>
 
 // CONSTANTS
 const size_t WINDOW_WIDTH = 800;
 const size_t WINDOW_HEIGHT = 600;
+const size_t GL_VER_MAJOR = 4;
+const size_t GL_VER_MINOR = 3;
 
 // GLOBAL VARIABLES
 GLFWwindow* pWindow;
@@ -27,8 +28,8 @@ bool initialize()
 		return false;
 	}
 
-	glfwWindowHint(GLFW_CONTEXT_VERSION_MAJOR, 4);
-	glfwWindowHint(GLFW_CONTEXT_VERSION_MINOR, 3);
+	glfwWindowHint(GLFW_CONTEXT_VERSION_MAJOR, GL_VER_MAJOR);
+	glfwWindowHint(GLFW_CONTEXT_VERSION_MINOR, GL_VER_MINOR);
 	pWindow = glfwCreateWindow(WINDOW_WIDTH, WINDOW_HEIGHT, "imgui-ovr", nullptr, nullptr);
 	if (!pWindow)
 	{
@@ -52,6 +53,7 @@ bool initialize()
 void setup_opengl_state()
 {
 	glViewport(0, 0, WINDOW_WIDTH, WINDOW_HEIGHT);
+	glClearColor(1, 0, 0, 1);
 }
 
 void process_input()
@@ -60,11 +62,20 @@ void process_input()
 		glfwSetWindowShouldClose(pWindow, true);
 }
 
+void render()
+{
+	
+}
+
 void application_loop()
 {
 	while (!glfwWindowShouldClose(pWindow))
 	{
 		process_input();
+		
+		glClear(GL_COLOR_BUFFER_BIT);
+
+		render();
 		
 		glfwSwapBuffers(pWindow);
 		glfwPollEvents();
