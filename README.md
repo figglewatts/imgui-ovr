@@ -10,6 +10,8 @@ Experimenting with ImGui and Oculus SDK
 	- Download and extract to `./include`
 - [dear imgui](https://github.com/ocornut/imgui/releases/tag/v1.62)
 	- Download and extract `imconfig.h`, `imgui.cpp`, `imgui.h`, `imgui_demo.cpp`, `imgui_draw.cpp`, `imgui_internal.h`, `stb_rect_pack.h`, `stb_textedit.h`, and `stb_truetype.h` to `./deps`
+- [Oculus SDK for Windows](https://developer.oculus.com/downloads/package/oculus-sdk-for-windows/)
+	- Download and extract `OculusSDK/LibOVR/Lib/Windows/Win32/Release/VS2017/LibOVR.lib` to `./deps/`, and from `OculusSDK/LibOVR/Include`, extract `OVR_CAPI.h`, `OVR_CAPI_GL.h`, `OVR_CAPI_Keys.h`, `OVR_ErrorCode.h`, `OVR_Version.h`, and `Extras` to `./include/LibOVR`
 
 ## Quick-start
 1. Clone the repo
