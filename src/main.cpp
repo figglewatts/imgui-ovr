@@ -8,6 +8,8 @@
 #include "imgui.h"
 #include "imgui_impl_opengl3.h"
 #include "imgui_impl_glfw.h"
+#include "VR.h"
+#include "Camera.h"
 
 // CONSTANTS
 const size_t WINDOW_WIDTH = 800;
@@ -25,9 +27,9 @@ GLFWwindow* pWindow;
 // vao
 std::vector<Vertex> verts = 
 {
-	Vertex(glm::vec3(-0.5f, -0.5f, 0), glm::vec3(), glm::vec2(), glm::vec4(1, 0, 0, 1)),
-	Vertex(glm::vec3(0.5f, -0.5f, 0), glm::vec3(), glm::vec2(), glm::vec4(0, 1, 0, 1)),
-	Vertex(glm::vec3(0, 0.5f, 0), glm::vec3(), glm::vec2(), glm::vec4(0, 0, 1, 1))
+	Vertex(glm::vec3(-0.1f, -0.1f, 0), glm::vec3(), glm::vec2(), glm::vec4(1, 0, 0, 1)),
+	Vertex(glm::vec3(0.1f, -0.1f, 0), glm::vec3(), glm::vec2(), glm::vec4(0, 1, 0, 1)),
+	Vertex(glm::vec3(0, 0.1f, 0), glm::vec3(), glm::vec2(), glm::vec4(0, 0, 1, 1))
 };
 std::vector<unsigned> indices = { 0, 1, 2 };
 VAO* pVAO;
@@ -35,8 +37,9 @@ VAO* pVAO;
 Shader *pShader;
 
 // camera matrix, translated along z-axis for zoom back
-glm::mat4 camera = glm::translate(glm::mat4(1), glm::vec3(0, 0, -5.f));
+Camera camera;
 glm::mat4 projection;
+
 
 // END GLOBAL VARIABLES
 
@@ -46,6 +49,7 @@ void framebuffer_size_callback(GLFWwindow* window, int width, int height)
 {
 	glViewport(0, 0, width, height);
 	projection = glm::perspective(glm::radians(FOV_DEGREES), (float)width / (float)height, Z_NEAR, Z_FAR);
+	VR::set_screen(width, height);
 }
 
 // END GLFW CALLBACKS
@@ -86,6 +90,16 @@ void setup_opengl_state()
 {
 	glViewport(0, 0, WINDOW_WIDTH, WINDOW_HEIGHT);
 	glClearColor(0.2f, 0.2f, 0.2f, 1);
+
+	glEnable(GL_CULL_FACE);
+	glFrontFace(GL_CCW);
+	glCullFace(GL_BACK);
+	glBlendFunc(GL_SRC_ALPHA, GL_ONE_MINUS_SRC_ALPHA);
+	glBlendEquation(GL_ADD);
+
+	glEnable(GL_DEPTH_TEST);
+
+	glUseProgram(0);
 }
 
 void init_imgui()
@@ -116,7 +130,11 @@ void process_input()
 
 void render()
 {
-	ImGui::ShowDemoWindow();
+	pShader->bind();
+	pShader->setUniform("ModelViewMatrix", VR::currentView, false);
+	pShader->setUniform("ProjectionMatrix", VR::currentProjection, false);
+	pVAO->render();
+	pShader->unbind();
 }
 
 void application_loop()
@@ -124,19 +142,28 @@ void application_loop()
 	while (!glfwWindowShouldClose(pWindow))
 	{
 		process_input();
-		
-		glClear(GL_COLOR_BUFFER_BIT);
-
+		    
 		// Start the Dear ImGui frame
-		ImGui_ImplOpenGL3_NewFrame();
-		ImGui_ImplGlfw_NewFrame();
-		ImGui::NewFrame();
+		//ImGui_ImplOpenGL3_NewFrame();
+		//ImGui_ImplGlfw_NewFrame();
+		//ImGui::NewFrame();
 
-		render();
+		VR::begin_frame();
 
-		ImGui::Render();
+		for (int eye = 0; eye < 2; eye++)
+		{	
+			VR::begin_eye(eye);
 
-		ImGui_ImplOpenGL3_RenderDrawData(ImGui::GetDrawData());
+			render();
+
+			VR::end_eye(eye);
+		}
+
+		VR::end_frame();
+
+		//ImGui::Render();
+
+		//ImGui_ImplOpenGL3_RenderDrawData(ImGui::GetDrawData());
 		
 		glfwSwapBuffers(pWindow);
 		glfwPollEvents();
@@ -150,8 +177,17 @@ int main()
 		return -1;
 	}
 	setup_opengl_state();
+
+	if (!VR::init(WINDOW_WIDTH, WINDOW_HEIGHT))
+	{
+		return -1;
+	}
+	VR::pCamera = &camera;
+
 	init_imgui();
 	load_data();
+
+	camera.pos.z = 0.1f;
 
 	application_loop();
 
