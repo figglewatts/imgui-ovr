@@ -78,7 +78,7 @@
       <WarningLevel>Level3</WarningLevel>
       <Optimization>Disabled</Optimization>
       <SDLCheck>true</SDLCheck>
-      <AdditionalIncludeDirectories>$(ProjectDir)include;%(AdditionalIncludeDirectories)</AdditionalIncludeDirectories>
+      <AdditionalIncludeDirectories>$(ProjectDir)deps;$(ProjectDir)include;%(AdditionalIncludeDirectories)</AdditionalIncludeDirectories>
     </ClCompile>
     <Link>
       <AdditionalLibraryDirectories>$(ProjectDir)deps;%(AdditionalLibraryDirectories)</AdditionalLibraryDirectories>
@@ -94,7 +94,7 @@ XCOPY "$(SolutionDir)shaders" "$(TargetDir)shaders" /S /I /Y</Command>
       <WarningLevel>Level3</WarningLevel>
       <Optimization>Disabled</Optimization>
       <SDLCheck>true</SDLCheck>
-      <AdditionalIncludeDirectories>$(ProjectDir)include;%(AdditionalIncludeDirectories)</AdditionalIncludeDirectories>
+      <AdditionalIncludeDirectories>$(ProjectDir)deps;$(ProjectDir)include;%(AdditionalIncludeDirectories)</AdditionalIncludeDirectories>
     </ClCompile>
     <Link>
       <AdditionalLibraryDirectories>$(ProjectDir)deps;%(AdditionalLibraryDirectories)</AdditionalLibraryDirectories>
@@ -112,7 +112,7 @@ XCOPY "$(SolutionDir)shaders" "$(TargetDir)shaders" /S /I /Y</Command>
       <FunctionLevelLinking>true</FunctionLevelLinking>
       <IntrinsicFunctions>true</IntrinsicFunctions>
       <SDLCheck>true</SDLCheck>
-      <AdditionalIncludeDirectories>$(ProjectDir)include;%(AdditionalIncludeDirectories)</AdditionalIncludeDirectories>
+      <AdditionalIncludeDirectories>$(ProjectDir)deps;$(ProjectDir)include;%(AdditionalIncludeDirectories)</AdditionalIncludeDirectories>
     </ClCompile>
     <Link>
       <EnableCOMDATFolding>true</EnableCOMDATFolding>
@@ -132,7 +132,7 @@ XCOPY "$(SolutionDir)shaders" "$(TargetDir)shaders" /S /I /Y</Command>
       <FunctionLevelLinking>true</FunctionLevelLinking>
       <IntrinsicFunctions>true</IntrinsicFunctions>
       <SDLCheck>true</SDLCheck>
-      <AdditionalIncludeDirectories>$(ProjectDir)include;%(AdditionalIncludeDirectories)</AdditionalIncludeDirectories>
+      <AdditionalIncludeDirectories>$(ProjectDir)deps;$(ProjectDir)include;%(AdditionalIncludeDirectories)</AdditionalIncludeDirectories>
     </ClCompile>
     <Link>
       <EnableCOMDATFolding>true</EnableCOMDATFolding>
@@ -146,13 +146,26 @@ XCOPY "$(SolutionDir)shaders" "$(TargetDir)shaders" /S /I /Y</Command>
     </PreBuildEvent>
   </ItemDefinitionGroup>
   <ItemGroup>
+    <ClCompile Include="deps\imgui.cpp" />
+    <ClCompile Include="deps\imgui_demo.cpp" />
+    <ClCompile Include="deps\imgui_draw.cpp" />
     <ClCompile Include="src\glad.c" />
+    <ClCompile Include="src\imgui_impl_glfw.cpp" />
+    <ClCompile Include="src\imgui_impl_opengl3.cpp" />
     <ClCompile Include="src\main.cpp" />
     <ClCompile Include="src\Shader.cpp" />
     <ClCompile Include="src\VAO.cpp" />
   </ItemGroup>
   <ItemGroup>
+    <ClInclude Include="deps\imconfig.h" />
+    <ClInclude Include="deps\imgui.h" />
+    <ClInclude Include="deps\imgui_internal.h" />
+    <ClInclude Include="deps\stb_rect_pack.h" />
+    <ClInclude Include="deps\stb_textedit.h" />
+    <ClInclude Include="deps\stb_truetype.h" />
     <ClInclude Include="src\GL.h" />
+    <ClInclude Include="src\imgui_impl_glfw.h" />
+    <ClInclude Include="src\imgui_impl_opengl3.h" />
     <ClInclude Include="src\Shader.h" />
     <ClInclude Include="src\VAO.h" />
   </ItemGroup>

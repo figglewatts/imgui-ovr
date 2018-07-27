@@ -5,6 +5,9 @@
 #include <glm/gtc/matrix_transform.hpp>
 #include "VAO.h"
 #include "Shader.h"
+#include "imgui.h"
+#include "imgui_impl_opengl3.h"
+#include "imgui_impl_glfw.h"
 
 // CONSTANTS
 const size_t WINDOW_WIDTH = 800;
@@ -14,6 +17,7 @@ const size_t GL_VER_MINOR = 3;
 const float FOV_DEGREES = 60;
 const float Z_NEAR = 0.1f;
 const float Z_FAR = 100;
+const char* glsl_version = "#version 330 core";
 
 // GLOBAL VARIABLES
 GLFWwindow* pWindow;
@@ -84,6 +88,20 @@ void setup_opengl_state()
 	glClearColor(0.2f, 0.2f, 0.2f, 1);
 }
 
+void init_imgui()
+{
+	IMGUI_CHECKVERSION();
+	ImGui::CreateContext();
+	ImGuiIO& io = ImGui::GetIO(); (void)io;
+
+	ImGui_ImplGlfw_InitForOpenGL(pWindow, true);
+	ImGui_ImplOpenGL3_Init(glsl_version);
+
+	ImGui::StyleColorsDark();
+
+
+}
+
 void load_data()
 {
 	pVAO = new VAO(verts, indices);
@@ -98,11 +116,7 @@ void process_input()
 
 void render()
 {
-	pShader->bind();
-	pShader->setUniform("ModelViewMatrix", camera, false);
-	pShader->setUniform("ProjectionMatrix", projection, false);
-	pVAO->render();
-	pShader->unbind();
+	ImGui::ShowDemoWindow();
 }
 
 void application_loop()
@@ -113,7 +127,16 @@ void application_loop()
 		
 		glClear(GL_COLOR_BUFFER_BIT);
 
+		// Start the Dear ImGui frame
+		ImGui_ImplOpenGL3_NewFrame();
+		ImGui_ImplGlfw_NewFrame();
+		ImGui::NewFrame();
+
 		render();
+
+		ImGui::Render();
+
+		ImGui_ImplOpenGL3_RenderDrawData(ImGui::GetDrawData());
 		
 		glfwSwapBuffers(pWindow);
 		glfwPollEvents();
@@ -127,9 +150,15 @@ int main()
 		return -1;
 	}
 	setup_opengl_state();
+	init_imgui();
 	load_data();
 
 	application_loop();
+
+	// Cleanup
+	ImGui_ImplOpenGL3_Shutdown();
+	ImGui_ImplGlfw_Shutdown();
+	ImGui::DestroyContext();
 
 	glfwDestroyWindow(pWindow);
 	glfwTerminate();
