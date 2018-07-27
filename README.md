@@ -8,6 +8,8 @@ Experimenting with ImGui and Oculus SDK
 	- Download Win32 binaries and extract `lib-vc2015/glfw3.dll` and `lib-vc2015/glfw3dll.lib` to `./deps`
 - [GLM](https://glm.g-truc.net/0.9.9/index.html)
 	- Download and extract to `./include`
+- [dear imgui](https://github.com/ocornut/imgui/releases/tag/v1.62)
+	- Download and extract `imconfig.h`, `imgui.cpp`, `imgui.h`, `imgui_demo.cpp`, `imgui_draw.cpp`, `imgui_internal.h`, `stb_rect_pack.h`, `stb_textedit.h`, and `stb_truetype.h` to `./deps`
 
 ## Quick-start
 1. Clone the repo
