@@ -2,6 +2,7 @@
 
 #include <iostream>
 #include <vector>
+#include <glm/gtc/matrix_transform.hpp>
 #include "VAO.h"
 #include "Shader.h"
 
@@ -10,10 +11,14 @@ const size_t WINDOW_WIDTH = 800;
 const size_t WINDOW_HEIGHT = 600;
 const size_t GL_VER_MAJOR = 4;
 const size_t GL_VER_MINOR = 3;
+const float FOV_DEGREES = 60;
+const float Z_NEAR = 0.1f;
+const float Z_FAR = 100;
 
 // GLOBAL VARIABLES
 GLFWwindow* pWindow;
 
+// vao
 std::vector<Vertex> verts = 
 {
 	Vertex(glm::vec3(-0.5f, -0.5f, 0), glm::vec3(), glm::vec2(), glm::vec4(1, 0, 0, 1)),
@@ -25,6 +30,10 @@ VAO* pVAO;
 
 Shader *pShader;
 
+// camera matrix, translated along z-axis for zoom back
+glm::mat4 camera = glm::translate(glm::mat4(1), glm::vec3(0, 0, -5.f));
+glm::mat4 projection;
+
 // END GLOBAL VARIABLES
 
 // BEGIN GLFW CALLBACKS
@@ -32,6 +41,7 @@ Shader *pShader;
 void framebuffer_size_callback(GLFWwindow* window, int width, int height)
 {
 	glViewport(0, 0, width, height);
+	projection = glm::perspective(glm::radians(FOV_DEGREES), (float)width / (float)height, Z_NEAR, Z_FAR);
 }
 
 // END GLFW CALLBACKS
@@ -63,6 +73,8 @@ bool initialize()
 
 	glfwSetFramebufferSizeCallback(pWindow, framebuffer_size_callback);
 
+	projection = glm::perspective(glm::radians(FOV_DEGREES), (float)WINDOW_WIDTH / (float)WINDOW_HEIGHT, Z_NEAR, Z_FAR);
+
 	return true;
 }
 
@@ -87,6 +99,8 @@ void process_input()
 void render()
 {
 	pShader->bind();
+	pShader->setUniform("ModelViewMatrix", camera, false);
+	pShader->setUniform("ProjectionMatrix", projection, false);
 	pVAO->render();
 	pShader->unbind();
 }
