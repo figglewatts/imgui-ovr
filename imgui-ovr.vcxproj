@@ -85,7 +85,8 @@
       <AdditionalDependencies>glfw3dll.lib;%(AdditionalDependencies)</AdditionalDependencies>
     </Link>
     <PreBuildEvent>
-      <Command>copy /Y "$(SolutionDir)deps\glfw3.dll" "$(TargetDir)glfw3.dll"</Command>
+      <Command>copy /Y "$(SolutionDir)deps\glfw3.dll" "$(TargetDir)glfw3.dll"
+XCOPY "$(SolutionDir)shaders" "$(TargetDir)shaders" /S /I /Y</Command>
     </PreBuildEvent>
   </ItemDefinitionGroup>
   <ItemDefinitionGroup Condition="'$(Configuration)|$(Platform)'=='Debug|x64'">
@@ -100,7 +101,8 @@
       <AdditionalDependencies>glfw3dll.lib;%(AdditionalDependencies)</AdditionalDependencies>
     </Link>
     <PreBuildEvent>
-      <Command>copy /Y "$(SolutionDir)deps\glfw3.dll" "$(TargetDir)glfw3.dll"</Command>
+      <Command>copy /Y "$(SolutionDir)deps\glfw3.dll" "$(TargetDir)glfw3.dll"
+XCOPY "$(SolutionDir)shaders" "$(TargetDir)shaders" /S /I /Y</Command>
     </PreBuildEvent>
   </ItemDefinitionGroup>
   <ItemDefinitionGroup Condition="'$(Configuration)|$(Platform)'=='Release|Win32'">
@@ -119,7 +121,8 @@
       <AdditionalDependencies>glfw3dll.lib;%(AdditionalDependencies)</AdditionalDependencies>
     </Link>
     <PreBuildEvent>
-      <Command>copy /Y "$(SolutionDir)deps\glfw3.dll" "$(TargetDir)glfw3.dll"</Command>
+      <Command>copy /Y "$(SolutionDir)deps\glfw3.dll" "$(TargetDir)glfw3.dll"
+XCOPY "$(SolutionDir)shaders" "$(TargetDir)shaders" /S /I /Y</Command>
     </PreBuildEvent>
   </ItemDefinitionGroup>
   <ItemDefinitionGroup Condition="'$(Configuration)|$(Platform)'=='Release|x64'">
@@ -138,7 +141,8 @@
       <AdditionalDependencies>glfw3dll.lib;%(AdditionalDependencies)</AdditionalDependencies>
     </Link>
     <PreBuildEvent>
-      <Command>copy /Y "$(SolutionDir)deps\glfw3.dll" "$(TargetDir)glfw3.dll"</Command>
+      <Command>copy /Y "$(SolutionDir)deps\glfw3.dll" "$(TargetDir)glfw3.dll"
+XCOPY "$(SolutionDir)shaders" "$(TargetDir)shaders" /S /I /Y</Command>
     </PreBuildEvent>
   </ItemDefinitionGroup>
   <ItemGroup>

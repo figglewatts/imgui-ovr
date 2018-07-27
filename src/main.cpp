@@ -1,6 +1,9 @@
 #include "GL.h"
 
 #include <iostream>
+#include <vector>
+#include "VAO.h"
+#include "Shader.h"
 
 // CONSTANTS
 const size_t WINDOW_WIDTH = 800;
@@ -10,6 +13,19 @@ const size_t GL_VER_MINOR = 3;
 
 // GLOBAL VARIABLES
 GLFWwindow* pWindow;
+
+std::vector<Vertex> verts = 
+{
+	Vertex(glm::vec3(-0.5f, -0.5f, 0), glm::vec3(), glm::vec2(), glm::vec4(1, 0, 0, 1)),
+	Vertex(glm::vec3(0.5f, -0.5f, 0), glm::vec3(), glm::vec2(), glm::vec4(0, 1, 0, 1)),
+	Vertex(glm::vec3(0, 0.5f, 0), glm::vec3(), glm::vec2(), glm::vec4(0, 0, 1, 1))
+};
+std::vector<unsigned> indices = { 0, 1, 2 };
+VAO* pVAO;
+
+Shader *pShader;
+
+// END GLOBAL VARIABLES
 
 // BEGIN GLFW CALLBACKS
 
@@ -53,7 +69,13 @@ bool initialize()
 void setup_opengl_state()
 {
 	glViewport(0, 0, WINDOW_WIDTH, WINDOW_HEIGHT);
-	glClearColor(1, 0, 0, 1);
+	glClearColor(0.2f, 0.2f, 0.2f, 1);
+}
+
+void load_data()
+{
+	pVAO = new VAO(verts, indices);
+	pShader = new Shader("basic", "shaders/basic");
 }
 
 void process_input()
@@ -64,7 +86,9 @@ void process_input()
 
 void render()
 {
-	
+	pShader->bind();
+	pVAO->render();
+	pShader->unbind();
 }
 
 void application_loop()
@@ -89,6 +113,7 @@ int main()
 		return -1;
 	}
 	setup_opengl_state();
+	load_data();
 
 	application_loop();
 
