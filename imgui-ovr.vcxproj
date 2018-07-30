@@ -152,6 +152,7 @@ XCOPY "$(SolutionDir)shaders" "$(TargetDir)shaders" /S /I /Y</Command>
     <ClCompile Include="deps\imgui_draw.cpp" />
     <ClCompile Include="src\imgui_impl_glfw.cpp" />
     <ClCompile Include="src\imgui_impl_opengl3.cpp" />
+    <ClCompile Include="src\imgui_impl_ovr.cpp" />
     <ClCompile Include="src\main.cpp" />
     <ClCompile Include="src\Shader.cpp" />
     <ClCompile Include="src\TextureBuffer.cpp" />
@@ -170,6 +171,7 @@ XCOPY "$(SolutionDir)shaders" "$(TargetDir)shaders" /S /I /Y</Command>
     <ClInclude Include="src\GL.h" />
     <ClInclude Include="src\imgui_impl_glfw.h" />
     <ClInclude Include="src\imgui_impl_opengl3.h" />
+    <ClInclude Include="src\imgui_impl_ovr.h" />
     <ClInclude Include="src\Shader.h" />
     <ClInclude Include="src\TextureBuffer.h" />
     <ClInclude Include="src\VAO.h" />

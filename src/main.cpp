@@ -6,10 +6,9 @@
 #include "VAO.h"
 #include "Shader.h"
 #include "imgui.h"
-#include "imgui_impl_opengl3.h"
-#include "imgui_impl_glfw.h"
 #include "VR.h"
 #include "Camera.h"
+#include "imgui_impl_ovr.h"
 
 // CONSTANTS
 const size_t WINDOW_WIDTH = 800;
@@ -23,6 +22,9 @@ const char* glsl_version = "#version 330 core";
 
 // GLOBAL VARIABLES
 GLFWwindow* pWindow;
+glm::mat4 uiModelMatrix;
+char buf[256];
+float f;
 
 // vao
 std::vector<Vertex> verts = 
@@ -38,7 +40,6 @@ Shader *pShader;
 
 // camera matrix, translated along z-axis for zoom back
 Camera camera;
-glm::mat4 projection;
 
 
 // END GLOBAL VARIABLES
@@ -48,8 +49,12 @@ glm::mat4 projection;
 void framebuffer_size_callback(GLFWwindow* window, int width, int height)
 {
 	glViewport(0, 0, width, height);
-	projection = glm::perspective(glm::radians(FOV_DEGREES), (float)width / (float)height, Z_NEAR, Z_FAR);
 	VR::set_screen(width, height);
+}
+
+void key_callback(GLFWwindow* window, int key, int scancode, int action, int mods)
+{
+	ImGui_ImplOvr_KeyFunc(key, action, mods);
 }
 
 // END GLFW CALLBACKS
@@ -80,8 +85,9 @@ bool initialize()
 	}
 
 	glfwSetFramebufferSizeCallback(pWindow, framebuffer_size_callback);
+	glfwSetKeyCallback(pWindow, key_callback);
 
-	projection = glm::perspective(glm::radians(FOV_DEGREES), (float)WINDOW_WIDTH / (float)WINDOW_HEIGHT, Z_NEAR, Z_FAR);
+	uiModelMatrix = glm::translate(glm::mat4(1), glm::vec3(0, 0, -1.0));
 
 	return true;
 }
@@ -108,8 +114,10 @@ void init_imgui()
 	ImGui::CreateContext();
 	ImGuiIO& io = ImGui::GetIO(); (void)io;
 
-	ImGui_ImplGlfw_InitForOpenGL(pWindow, true);
-	ImGui_ImplOpenGL3_Init(glsl_version);
+	//ImGui_ImplGlfw_InitForOpenGL(pWindow, true);
+	//ImGui_ImplOpenGL3_Init(glsl_version);
+
+	ImGui_ImplOvr_Init(pWindow);
 
 	ImGui::StyleColorsDark();
 
@@ -135,6 +143,19 @@ void render()
 	pShader->setUniform("ProjectionMatrix", VR::currentProjection, false);
 	pVAO->render();
 	pShader->unbind();
+
+	ImGui_ImplOvr_RenderGUIQuad(VR::currentProjection, VR::currentView, uiModelMatrix);
+}
+
+void render_gui()
+{
+	ImGui::Text("Hello, world %d", 123);
+	if (ImGui::Button("Save"))
+	{
+		// do stuff
+	}
+	ImGui::InputText("string", buf, IM_ARRAYSIZE(buf));
+	ImGui::SliderFloat("float", &f, 0.0f, 1.0f);
 }
 
 void application_loop()
@@ -142,28 +163,29 @@ void application_loop()
 	while (!glfwWindowShouldClose(pWindow))
 	{
 		process_input();
-		    
-		// Start the Dear ImGui frame
-		//ImGui_ImplOpenGL3_NewFrame();
-		//ImGui_ImplGlfw_NewFrame();
-		//ImGui::NewFrame();
 
+		// Start the Dear ImGui frame
+		ImGui_ImplOvr_NewFrame();
+		ImGui::NewFrame();
+
+		render_gui();
+
+		// only need to render GUI once, not for each eye
+		ImGui::Render();
+		ImGui_ImplOvr_RenderDrawData(ImGui::GetDrawData());
+		    
 		VR::begin_frame();
 
 		for (int eye = 0; eye < 2; eye++)
 		{	
 			VR::begin_eye(eye);
-
+			
 			render();
 
 			VR::end_eye(eye);
 		}
 
 		VR::end_frame();
-
-		//ImGui::Render();
-
-		//ImGui_ImplOpenGL3_RenderDrawData(ImGui::GetDrawData());
 		
 		glfwSwapBuffers(pWindow);
 		glfwPollEvents();
@@ -192,8 +214,9 @@ int main()
 	application_loop();
 
 	// Cleanup
-	ImGui_ImplOpenGL3_Shutdown();
-	ImGui_ImplGlfw_Shutdown();
+	//ImGui_ImplOpenGL3_Shutdown();
+	//ImGui_ImplGlfw_Shutdown();
+	ImGui_ImplOvr_Shutdown();
 	ImGui::DestroyContext();
 
 	glfwDestroyWindow(pWindow);

@@ -174,6 +174,9 @@ bool VR::init(size_t window_width, size_t window_height)
 		}
 	}
 
+	textureSizes[0] = textureSwapchains[0]->GetSize();
+	textureSizes[1] = textureSwapchains[1]->GetSize();
+
 	bufferSize.w = textureSwapchains[0]->GetSize().w + textureSwapchains[1]->GetSize().w;
 	bufferSize.h = std::max(textureSwapchains[0]->GetSize().h, textureSwapchains[1]->GetSize().h);
 
