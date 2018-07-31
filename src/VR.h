@@ -28,6 +28,7 @@ public:
 	static glm::mat4 currentProjection;
 	static glm::mat4 currentView;
 	static ovrSizei windowSize;
+	static long long frameIndex;
 
 	// VAO and shader used for drawing mirror texture quad on screen
 	static VAO *pMirrorQuadVao;

@@ -21,6 +21,7 @@ Camera *VR::pCamera;
 glm::mat4 VR::currentProjection;
 glm::mat4 VR::currentView;
 ovrSizei VR::windowSize;
+long long VR::frameIndex = 0;
 
 VAO *VR::pMirrorQuadVao;
 Shader *VR::pMirrorShader;
@@ -89,6 +90,8 @@ void VR::end_frame()
 	glBindTexture(GL_TEXTURE_2D, 0);
 	glDepthMask(GL_TRUE);
 	glEnable(GL_DEPTH_TEST);
+
+	frameIndex++;
 }
 
 void VR::begin_eye(int eye)

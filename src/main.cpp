@@ -9,6 +9,7 @@
 #include "VR.h"
 #include "Camera.h"
 #include "imgui_impl_ovr.h"
+#include "imgui_impl_glfw.h"
 
 // CONSTANTS
 const size_t WINDOW_WIDTH = 800;
@@ -54,7 +55,7 @@ void framebuffer_size_callback(GLFWwindow* window, int width, int height)
 
 void key_callback(GLFWwindow* window, int key, int scancode, int action, int mods)
 {
-	ImGui_ImplOvr_KeyFunc(key, action, mods);
+	ImGui_ImplGlfw_KeyCallback(window, key, scancode, action, mods);
 }
 
 // END GLFW CALLBACKS
@@ -87,7 +88,7 @@ bool initialize()
 	glfwSetFramebufferSizeCallback(pWindow, framebuffer_size_callback);
 	glfwSetKeyCallback(pWindow, key_callback);
 
-	uiModelMatrix = glm::translate(glm::mat4(1), glm::vec3(0, 0, -1.0));
+	uiModelMatrix = glm::translate(glm::mat4(1), glm::vec3(0, 0, -1.f));
 
 	return true;
 }
@@ -114,14 +115,10 @@ void init_imgui()
 	ImGui::CreateContext();
 	ImGuiIO& io = ImGui::GetIO(); (void)io;
 
-	//ImGui_ImplGlfw_InitForOpenGL(pWindow, true);
-	//ImGui_ImplOpenGL3_Init(glsl_version);
-
-	ImGui_ImplOvr_Init(pWindow);
+	ImGui_ImplGlfw_InitForOpenGL(pWindow, false);
+	ImGui_ImplOvr_Init();
 
 	ImGui::StyleColorsDark();
-
-
 }
 
 void load_data()
@@ -138,24 +135,27 @@ void process_input()
 
 void render()
 {
-	pShader->bind();
+	/*pShader->bind();
 	pShader->setUniform("ModelViewMatrix", VR::currentView, false);
 	pShader->setUniform("ProjectionMatrix", VR::currentProjection, false);
 	pVAO->render();
-	pShader->unbind();
+	pShader->unbind();*/
 
 	ImGui_ImplOvr_RenderGUIQuad(VR::currentProjection, VR::currentView, uiModelMatrix);
+	ImGui_ImplOvr_RenderControllerLine(VR::currentProjection, VR::currentView);
 }
 
 void render_gui()
 {
-	ImGui::Text("Hello, world %d", 123);
+	/*ImGui::Text("Hello, world %d", 123);
 	if (ImGui::Button("Save"))
 	{
-		// do stuff
+		std::cout << "Saving!!" << std::endl;
 	}
 	ImGui::InputText("string", buf, IM_ARRAYSIZE(buf));
-	ImGui::SliderFloat("float", &f, 0.0f, 1.0f);
+	ImGui::SliderFloat("float", &f, 0.0f, 1.0f);*/
+
+	ImGui::ShowTestWindow();
 }
 
 void application_loop()
@@ -165,7 +165,8 @@ void application_loop()
 		process_input();
 
 		// Start the Dear ImGui frame
-		ImGui_ImplOvr_NewFrame();
+		ImGui_ImplGlfw_NewFrame();
+		ImGui_ImplOvr_NewFrame(uiModelMatrix);
 		ImGui::NewFrame();
 
 		render_gui();
@@ -214,9 +215,8 @@ int main()
 	application_loop();
 
 	// Cleanup
-	//ImGui_ImplOpenGL3_Shutdown();
-	//ImGui_ImplGlfw_Shutdown();
 	ImGui_ImplOvr_Shutdown();
+	ImGui_ImplGlfw_Shutdown();
 	ImGui::DestroyContext();
 
 	glfwDestroyWindow(pWindow);
