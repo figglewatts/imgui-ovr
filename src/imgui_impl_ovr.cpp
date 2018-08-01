@@ -40,7 +40,8 @@ static GLuint g_QuadVao = 0, g_QuadVbo = 0, g_QuadEbo = 0;
 static GLuint g_LineVao = 0, g_LineVbo = 0;
 
 static glm::vec3 g_LineStart;
-static glm::vec3 g_LineDir;
+static glm::vec3 g_LineEnd;
+static bool g_MouseOverUI = false;
 
 static glm::vec3 g_LineColor = { 1, 0, 0 };
 
@@ -88,9 +89,7 @@ static GLuint g_QuadIndices[6] = { 1, 0, 2, 0, 3, 2 };
 // user-configurable via ImGui_ImplOvr_SetThumbstickDeadZone(float deadzone).
 static float g_ThumbstickDeadzone = 0.3f;
 
-// The maximum distance to attempt to raycast from Touch controller to place mouse pointer
-// on virtual canvas. Default value is 30.0f, but is user-configurable via ImGui_ImplOvr_SetMaxRaycastDistance(float distance).
-static float g_MaxRaycastDistance = 30.f;
+static ovrHapticsBuffer g_HapticPulseBuffer;
 
 /**
  * @brief Maps an analog input with a lower and higher value to [0, 1]
@@ -110,12 +109,6 @@ static float ImGui_ImplOvr_MapAnalogInput(float v, float VL, float VH)
 
 static void ImGui_ImplOvr_UpdateOculusTouchButtons()
 {
-	// for buttons: io.NavInputs[ImGuiNavInput_xxx] = 1.0f
-	// for analog:  
-	//     io.NavInputs[ImGuiNavInput_xxx] = [0, 1]
-
-	// TODO: rest of the buttons
-
 	ovrInputState inputState;
 	ovr_GetInputState(VR::vrSession, ovrControllerType_Touch, &inputState);
 
@@ -131,12 +124,6 @@ static void ImGui_ImplOvr_UpdateOculusTouchButtons()
 	io.NavInputs[ImGuiNavInput_Input] = inputState.Buttons & ovrButton_LThumb; // RThumb
 	io.NavInputs[ImGuiNavInput_Menu] = inputState.Buttons & ovrButton_X; // A
 
-	/* Can't bind these to same stick as DPad, would combine the inputs in unwanted ways
-	io.NavInputs[ImGuiNavInput_LStickLeft] = ImGui_ImplOvr_MapAnalogInput(inputState.ThumbstickNoDeadzone[0].x, -g_ThumbstickDeadzone, -1.0f); // scroll / move window (w/ PadMenu) 
-	io.NavInputs[ImGuiNavInput_LStickRight] = ImGui_ImplOvr_MapAnalogInput(inputState.ThumbstickNoDeadzone[0].x, g_ThumbstickDeadzone, 1.0f);
-	io.NavInputs[ImGuiNavInput_LStickUp] = ImGui_ImplOvr_MapAnalogInput(inputState.ThumbstickNoDeadzone[0].y, g_ThumbstickDeadzone, 1.0f);
-	io.NavInputs[ImGuiNavInput_LStickDown] = ImGui_ImplOvr_MapAnalogInput(inputState.ThumbstickNoDeadzone[0].y, -g_ThumbstickDeadzone, -1.0f);
-	*/
 	io.NavInputs[ImGuiNavInput_FocusPrev] = 0; // prev window (w/ PadMenu)
 	io.NavInputs[ImGuiNavInput_FocusNext] = inputState.Buttons & ovrButton_Y; // B
 	io.NavInputs[ImGuiNavInput_TweakSlow] = 0; // slower tweaks
@@ -149,16 +136,17 @@ static void ImGui_ImplOvr_UpdateOculusTouchButtons()
 
 static void ImGui_ImplOvr_UpdateMousePos(glm::mat4 guiModelMatrix)
 {
-	// 1 0 2, 0 3 2
+	g_MouseOverUI = false;
+
 	glm::vec3 p0(-1.f, -1.f, 0.f);
 	glm::vec3 p1(-1.f, 1.f, 0.f);
 	glm::vec3 p2(1.f, 1.f, 0.f);
 	glm::vec3 p3(1.f, -1.f, 0.f);
 
-	glm::mat4 modelMat = guiModelMatrix * glm::scale(glm::mat4(1),
+	// apply scale to quad to make pixel size square
+	const glm::mat4 modelMat = guiModelMatrix * glm::scale(glm::mat4(1),
 		glm::vec3(g_VirtualCanvasSize.x / g_PixelsPerUnit,
 			g_VirtualCanvasSize.y / g_PixelsPerUnit, 1.0f));
-
 	p0 = modelMat * glm::vec4(p0, 1);
 	p1 = modelMat * glm::vec4(p1, 1);
 	p2 = modelMat * glm::vec4(p2, 1);
@@ -167,20 +155,23 @@ static void ImGui_ImplOvr_UpdateMousePos(glm::mat4 guiModelMatrix)
 	const double displayMidpointSeconds = ovr_GetPredictedDisplayTime(VR::vrSession, VR::frameIndex);
 	const ovrTrackingState trackState = ovr_GetTrackingState(VR::vrSession, displayMidpointSeconds, ovrTrue);
 
-	ovrPosef handPose = trackState.HandPoses[0].ThePose;
-	const glm::vec3 handPosition = glm::vec3(handPose.Position.x, handPose.Position.y, handPose.Position.z);
+	const ovrPosef handPose = trackState.HandPoses[0].ThePose;
+	glm::vec3 handPosition = glm::vec3(handPose.Position.x, handPose.Position.y, handPose.Position.z);
 	const glm::quat handOrientation = glm::quat(handPose.Orientation.w, handPose.Orientation.x, handPose.Orientation.y, handPose.Orientation.z);
 	const glm::vec3 handForward = handOrientation * glm::vec3(0, 0, -1);
 
-	glm::mat4 toLocal = glm::inverse(modelMat);
+	handPosition -= handOrientation * glm::vec3(0.06f, 0, 0);
+
+	const glm::mat4 toLocal = glm::inverse(modelMat);
 	const glm::vec3 start = glm::vec4(handPosition, 1);
 
 	g_LineStart = handPosition;
-	g_LineDir = handForward;
 
 	glm::vec2 b;
 	bool intersect;
 	float dist;
+	static glm::vec2 mousePosLastFrame;
+	ImGuiIO& io = ImGui::GetIO();
 	do
 	{
 		intersect = glm::intersectRayTriangle(start, handForward, p1, p0, p2, b, dist);
@@ -193,21 +184,45 @@ static void ImGui_ImplOvr_UpdateMousePos(glm::mat4 guiModelMatrix)
 	
 	if (intersect)
 	{
-		//std::cout << glm::to_string(b) << std::endl;
 		
-		const float barycentricZ = 1.0f - b.x - b.y;
+		
+		g_MouseOverUI = true;
+
 		const glm::vec3 pt = start + handForward * dist;
+		g_LineEnd = pt;
 
 		const glm::vec3 localPt = toLocal * glm::vec4(pt, 1);
 
-		ImGuiIO& io = ImGui::GetIO();
-
-		glm::vec2 mousePos = { (g_VirtualCanvasSize.x / 2.f) * localPt.x + (g_VirtualCanvasSize.x / 2.f), 
-			(g_VirtualCanvasSize.y / 2.f) - (g_VirtualCanvasSize.y / 2.f) * localPt.y };
-		std::cout << glm::to_string(mousePos) << std::endl;
+		// linearly interpolate between virtual canvas sizes based on UI quad local intersection position
+		// to get mouse position on canvas
+		const glm::vec2 mousePos = { 
+			(g_VirtualCanvasSize.x / 2.f) * localPt.x + (g_VirtualCanvasSize.x / 2.f),  // xPos = (width / 2) * localX + (width / 2)
+			(g_VirtualCanvasSize.y / 2.f) - (g_VirtualCanvasSize.y / 2.f) * localPt.y   // yPos = (-height / 2) * localY + (height / 2)
+		};
 
 		io.MousePos = ImVec2(mousePos.x, mousePos.y);
+
+		mousePosLastFrame = mousePos;
 	}
+	else
+	{
+		io.MousePos = ImVec2(mousePosLastFrame.x, mousePosLastFrame.y);
+	}
+}
+
+// adapted from:
+// https://github.com/temcgraw/ImguiVR/blob/master/imgui_impl_vr.cpp#L715-L729
+static void PulseIfItemHovered()
+{
+	static bool itemHoveredLastFrame = false;
+
+	const bool itemHoveredThisFrame = ImGui::IsAnyItemHovered();
+
+	if (itemHoveredLastFrame != itemHoveredThisFrame)
+	{
+		ovr_SubmitControllerVibration(VR::vrSession, ovrControllerType_LTouch, &g_HapticPulseBuffer);
+	}
+	itemHoveredLastFrame = itemHoveredThisFrame;
 }
 
 static bool CheckShader(GLuint handle, const char* desc)
@@ -254,12 +269,18 @@ bool ImGui_ImplOvr_Init()
 	// in imgui_impl_glfw::NewFrame()
 	ImGui_ImplOvr_CreateDeviceObjects();
 
+	// create haptic pulse buffer
+	g_HapticPulseBuffer.Samples = new unsigned char[7] { 0, 255, 0, 255, 0, 255, 0 };
+	g_HapticPulseBuffer.SamplesCount = 7;
+	g_HapticPulseBuffer.SubmitMode = ovrHapticsBufferSubmit_Enqueue;
+
 	return true;
 }
 
 void ImGui_ImplOvr_Shutdown()
 {
 	ImGui_ImplOvr_DestroyDeviceObjects();
+	delete[] static_cast<unsigned char const*>(g_HapticPulseBuffer.Samples);
 }
 
 void ImGui_ImplOvr_NewFrame(glm::mat4 guiModelMatrix)
@@ -279,6 +300,11 @@ void ImGui_ImplOvr_NewFrame(glm::mat4 guiModelMatrix)
 	ImGui_ImplOvr_UpdateOculusTouchButtons();
 }
 
+void ImGui_ImplOvr_Update()
+{
+	PulseIfItemHovered();
+}
+
 void ImGui_ImplOvr_SetVirtualCanvasSize(glm::ivec2 size)
 {
 	g_VirtualCanvasSize = size;
@@ -288,11 +314,6 @@ void ImGui_ImplOvr_SetVirtualCanvasSize(glm::ivec2 size)
 void ImGui_ImplOvr_SetThumbstickDeadzone(float deadzone)
 {
 	g_ThumbstickDeadzone = deadzone;
-}
-
-void ImGui_ImplOvr_SetMaxRaycastDistance(float distance)
-{
-	g_MaxRaycastDistance = distance;
 }
 
 bool ImGui_ImplOvr_CreateFontsTexture()
@@ -775,13 +796,14 @@ void ImGui_ImplOvr_RenderGUIQuad(glm::mat4 proj, glm::mat4 view, glm::mat4 model
 
 void ImGui_ImplOvr_RenderControllerLine(glm::mat4 proj, glm::mat4 view)
 {
+	if (!g_MouseOverUI) return;
+	
 	// backup GL state
 	GLint last_program; glGetIntegerv(GL_CURRENT_PROGRAM, &last_program);
 	GLint last_array_buffer; glGetIntegerv(GL_ARRAY_BUFFER_BINDING, &last_array_buffer);
 	GLboolean last_enable_depth_test = glIsEnabled(GL_DEPTH_TEST);
 
-	const glm::vec3 lineEnd = g_LineStart + (g_LineDir * g_MaxRaycastDistance);
-	GLfloat lineVerts[6] = { g_LineStart.x, g_LineStart.y, g_LineStart.z, lineEnd.x, lineEnd.y, lineEnd.z };
+	GLfloat lineVerts[6] = { g_LineStart.x, g_LineStart.y, g_LineStart.z, g_LineEnd.x, g_LineEnd.y, g_LineEnd.z };
 
 	//glDisable(GL_DEPTH_TEST);
 

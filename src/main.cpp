@@ -88,7 +88,7 @@ bool initialize()
 	glfwSetFramebufferSizeCallback(pWindow, framebuffer_size_callback);
 	glfwSetKeyCallback(pWindow, key_callback);
 
-	uiModelMatrix = glm::translate(glm::mat4(1), glm::vec3(0, 0, -1.f));
+	uiModelMatrix = glm::translate(glm::mat4(1), glm::vec3(-1.f, 0, -1.f)) * glm::rotate(glm::mat4(1), glm::radians(30.f), glm::vec3(0, 1, 0));
 
 	return true;
 }
@@ -115,10 +115,16 @@ void init_imgui()
 	ImGui::CreateContext();
 	ImGuiIO& io = ImGui::GetIO(); (void)io;
 
+	// load a nice big sans-serif font for easy legibility in VR
+	io.Fonts->AddFontFromFileTTF("fnt/Roboto-Medium.ttf", 24.f);
+
+	ImGuiStyle* style = &ImGui::GetStyle();
+	style->ScrollbarSize = 30.f; // make scrollbar bigger for easier selection
+	style->GrabMinSize = 30.f; // make sure grab section doesn't get too thin
+
+
 	ImGui_ImplGlfw_InitForOpenGL(pWindow, false);
 	ImGui_ImplOvr_Init();
-
-	ImGui::StyleColorsDark();
 }
 
 void load_data()
@@ -170,6 +176,8 @@ void application_loop()
 		ImGui::NewFrame();
 
 		render_gui();
+
+		ImGui_ImplOvr_Update();
 
 		// only need to render GUI once, not for each eye
 		ImGui::Render();

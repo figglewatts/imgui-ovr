@@ -86,7 +86,8 @@
     </Link>
     <PreBuildEvent>
       <Command>copy /Y "$(SolutionDir)deps\glfw3.dll" "$(TargetDir)glfw3.dll"
-XCOPY "$(SolutionDir)shaders" "$(TargetDir)shaders" /S /I /Y</Command>
+XCOPY "$(SolutionDir)shaders" "$(TargetDir)shaders" /S /I /Y
+XCOPY "$(SolutionDir)fnt" "$(TargetDir)fnt" /S /I /Y</Command>
     </PreBuildEvent>
   </ItemDefinitionGroup>
   <ItemDefinitionGroup Condition="'$(Configuration)|$(Platform)'=='Debug|x64'">
@@ -102,7 +103,8 @@ XCOPY "$(SolutionDir)shaders" "$(TargetDir)shaders" /S /I /Y</Command>
     </Link>
     <PreBuildEvent>
       <Command>copy /Y "$(SolutionDir)deps\glfw3.dll" "$(TargetDir)glfw3.dll"
-XCOPY "$(SolutionDir)shaders" "$(TargetDir)shaders" /S /I /Y</Command>
+XCOPY "$(SolutionDir)shaders" "$(TargetDir)shaders" /S /I /Y
+XCOPY "$(SolutionDir)fnt" "$(TargetDir)fnt" /S /I /Y</Command>
     </PreBuildEvent>
   </ItemDefinitionGroup>
   <ItemDefinitionGroup Condition="'$(Configuration)|$(Platform)'=='Release|Win32'">
@@ -122,7 +124,8 @@ XCOPY "$(SolutionDir)shaders" "$(TargetDir)shaders" /S /I /Y</Command>
     </Link>
     <PreBuildEvent>
       <Command>copy /Y "$(SolutionDir)deps\glfw3.dll" "$(TargetDir)glfw3.dll"
-XCOPY "$(SolutionDir)shaders" "$(TargetDir)shaders" /S /I /Y</Command>
+XCOPY "$(SolutionDir)shaders" "$(TargetDir)shaders" /S /I /Y
+XCOPY "$(SolutionDir)fnt" "$(TargetDir)fnt" /S /I /Y</Command>
     </PreBuildEvent>
   </ItemDefinitionGroup>
   <ItemDefinitionGroup Condition="'$(Configuration)|$(Platform)'=='Release|x64'">
@@ -142,7 +145,8 @@ XCOPY "$(SolutionDir)shaders" "$(TargetDir)shaders" /S /I /Y</Command>
     </Link>
     <PreBuildEvent>
       <Command>copy /Y "$(SolutionDir)deps\glfw3.dll" "$(TargetDir)glfw3.dll"
-XCOPY "$(SolutionDir)shaders" "$(TargetDir)shaders" /S /I /Y</Command>
+XCOPY "$(SolutionDir)shaders" "$(TargetDir)shaders" /S /I /Y
+XCOPY "$(SolutionDir)fnt" "$(TargetDir)fnt" /S /I /Y</Command>
     </PreBuildEvent>
   </ItemDefinitionGroup>
   <ItemGroup>
