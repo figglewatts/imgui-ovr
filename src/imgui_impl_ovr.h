@@ -12,6 +12,12 @@
 #include <glm/glm.hpp>
 #include <LibOVR/OVR_CAPI.h>
 
+enum ImGuiVrInputMode
+{
+	ImGuiVrInputMode_Auto,
+	ImGuiVrInputMode_OneHand
+};
+
 struct ImDrawData;
 
 // functions called by user to use renderer
@@ -28,6 +34,8 @@ void ImGui_ImplOvr_SetVirtualCanvasSize(glm::ivec2 size);
 void ImGui_ImplOvr_SetThumbstickDeadzone(float deadzone);
 void ImGui_ImplOvr_SetControllerLineColor(glm::vec3 color);
 void ImGui_ImplOvr_SetPixelsPerUnit(float ppu);
+void ImGui_ImplOvr_SetInputHand(ovrHandType hand);
+void ImGui_ImplOvr_SetInputMode(ImGuiVrInputMode mode);
 
 // called internally
 bool ImGui_ImplOvr_CreateFontsTexture();

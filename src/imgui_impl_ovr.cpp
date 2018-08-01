@@ -14,6 +14,7 @@
 #include <glm/gtc/matrix_transform.hpp>
 
 #include <LibOVR/OVR_CAPI.h> // Oculus SDK
+#include "imgui_internal.h"
 
 // TODO: onscreen keyboard solution?
 
@@ -115,6 +116,16 @@ static long long* g_VRFrameIndex;
 // The current ovrSession of the Oculus API. Initialised in ImGui_ImplOvr_Init().
 static ovrSession g_VRSession;
 
+// the hand that is currently being used to control the GUI
+static ovrHandType g_OVRInputHand;
+
+// the current input mode, used for determining which controller to use for GUI input
+static ImGuiVrInputMode g_InputMode;
+
+// set to true if the input hand needs to be redetermined
+// will be set to true when both controllers are put down and are not being held
+static bool g_InputHandNeedsReset = true;
+
 /**
  * @brief Maps an analog input with a lower and higher value to [0, 1]
  * 
@@ -142,22 +153,22 @@ static void ImGui_ImplOvr_UpdateOculusTouchButtons()
 
 	ImGuiIO& io = ImGui::GetIO();
 
-	io.NavInputs[ImGuiNavInput_DpadDown] = inputState.ThumbstickNoDeadzone[0].y < -g_ThumbstickDeadzone;
-	io.NavInputs[ImGuiNavInput_DpadUp] = inputState.ThumbstickNoDeadzone[0].y > g_ThumbstickDeadzone;
-	io.NavInputs[ImGuiNavInput_DpadLeft] = inputState.ThumbstickNoDeadzone[0].x < -g_ThumbstickDeadzone;
-	io.NavInputs[ImGuiNavInput_DpadRight] = inputState.ThumbstickNoDeadzone[0].x > g_ThumbstickDeadzone;
-	io.NavInputs[ImGuiNavInput_Activate] = inputState.IndexTriggerRaw[0] > 0.5f;
+	io.NavInputs[ImGuiNavInput_DpadDown] = inputState.ThumbstickNoDeadzone[g_OVRInputHand].y < -g_ThumbstickDeadzone;
+	io.NavInputs[ImGuiNavInput_DpadUp] = inputState.ThumbstickNoDeadzone[g_OVRInputHand].y > g_ThumbstickDeadzone;
+	io.NavInputs[ImGuiNavInput_DpadLeft] = inputState.ThumbstickNoDeadzone[g_OVRInputHand].x < -g_ThumbstickDeadzone;
+	io.NavInputs[ImGuiNavInput_DpadRight] = inputState.ThumbstickNoDeadzone[g_OVRInputHand].x > g_ThumbstickDeadzone;
+	io.NavInputs[ImGuiNavInput_Activate] = inputState.IndexTriggerRaw[g_OVRInputHand] > 0.5f;
 
-	io.NavInputs[ImGuiNavInput_Cancel] = inputState.HandTriggerRaw[0] > 0.5f;
-	io.NavInputs[ImGuiNavInput_Input] = inputState.Buttons & ovrButton_LThumb; // RThumb
-	io.NavInputs[ImGuiNavInput_Menu] = inputState.Buttons & ovrButton_X; // A
+	io.NavInputs[ImGuiNavInput_Cancel] = inputState.HandTriggerRaw[g_OVRInputHand] > 0.5f;
+	io.NavInputs[ImGuiNavInput_Input] = g_OVRInputHand == ovrHand_Left ? inputState.Buttons & ovrButton_LThumb : inputState.Buttons & ovrButton_RThumb;
+	io.NavInputs[ImGuiNavInput_Menu] = g_OVRInputHand == ovrHand_Left ? inputState.Buttons & ovrButton_X : inputState.Buttons & ovrButton_A;
 
 	io.NavInputs[ImGuiNavInput_FocusPrev] = 0; // prev window (w/ PadMenu)
-	io.NavInputs[ImGuiNavInput_FocusNext] = inputState.Buttons & ovrButton_Y; // B
+	io.NavInputs[ImGuiNavInput_FocusNext] = g_OVRInputHand == ovrHand_Left ? inputState.Buttons & ovrButton_Y : inputState.Buttons & ovrButton_B;
 	io.NavInputs[ImGuiNavInput_TweakSlow] = 0; // slower tweaks
 	io.NavInputs[ImGuiNavInput_TweakFast] = 0; // faster tweaks
 
-	io.MouseDown[0] = inputState.IndexTriggerRaw[0] > 0.5f;
+	io.MouseDown[0] = inputState.IndexTriggerRaw[g_OVRInputHand] > 0.5f;
 
 	io.BackendFlags |= ImGuiBackendFlags_HasGamepad;
 }
@@ -194,7 +205,7 @@ static void ImGui_ImplOvr_UpdateMousePos(glm::mat4 guiModelMatrix)
 	// get tracking data from Oculus API and convert to GLM values
 	const double displayMidpointSeconds = ovr_GetPredictedDisplayTime(g_VRSession, *g_VRFrameIndex);
 	const ovrTrackingState trackState = ovr_GetTrackingState(g_VRSession, displayMidpointSeconds, ovrTrue);
-	const ovrPosef handPose = trackState.HandPoses[0].ThePose;
+	const ovrPosef handPose = trackState.HandPoses[g_OVRInputHand].ThePose;
 	const glm::vec3 handPosition = glm::vec3(handPose.Position.x, handPose.Position.y, handPose.Position.z);
 	const glm::quat handOrientation = glm::quat(handPose.Orientation.w, handPose.Orientation.x, handPose.Orientation.y, handPose.Orientation.z);
 	const glm::vec3 handForward = handOrientation * glm::vec3(0, 0, -1);
@@ -264,14 +275,53 @@ static void ImGui_ImplOvr_UpdateMousePos(glm::mat4 guiModelMatrix)
 static void PulseIfItemHovered()
 {
 	static bool itemHoveredLastFrame = false;
+	static ImGuiID lastHoveredID;
 
 	const bool itemHoveredThisFrame = ImGui::IsAnyItemHovered();
 
 	if (itemHoveredLastFrame != itemHoveredThisFrame)
 	{
-		ovr_SubmitControllerVibration(g_VRSession, ovrControllerType_LTouch, &g_HapticPulseBuffer);
+		// no hover last frame, but new hover this frame -- pulse!
+		ovr_SubmitControllerVibration(g_VRSession, g_OVRInputHand == ovrHand_Left ? ovrControllerType_LTouch : ovrControllerType_RTouch, &g_HapticPulseBuffer);
+	}
+	else if (itemHoveredLastFrame && itemHoveredThisFrame)
+	{
+		if (lastHoveredID != ImGui::GetHoveredID())
+		{
+			// we've hovered over a new item without stopping -- pulse!
+			ovr_SubmitControllerVibration(g_VRSession, g_OVRInputHand == ovrHand_Left ? ovrControllerType_LTouch : ovrControllerType_RTouch, &g_HapticPulseBuffer);
+		}
 	}
 	itemHoveredLastFrame = itemHoveredThisFrame;
+	lastHoveredID = ImGui::GetHoveredID();
+}
+
+static void AutoDetectInputController()
+{
+	ovrInputState inputState;
+	ovr_GetInputState(g_VRSession, ovrControllerType_Touch, &inputState);
+
+	if (!(inputState.Touches & ovrTouch_RIndexTrigger) && !(inputState.Touches & ovrTouch_LIndexTrigger))
+	{
+		g_InputHandNeedsReset = true;
+	}
+
+	if (!g_InputHandNeedsReset) return;
+
+	// for each hand
+	for (int c = ovrHand_Left; c < ovrHand_Count; c++)
+	{
+		if (inputState.Touches & ovrTouch_RIndexTrigger)
+		{
+			g_OVRInputHand = ovrHand_Right;
+			g_InputHandNeedsReset = false;
+		}
+		else if (inputState.Touches & ovrTouch_LIndexTrigger)
+		{
+			g_OVRInputHand = ovrHand_Left;
+			g_InputHandNeedsReset = false;
+		}
+	}
 }
 
 /**
@@ -394,6 +444,11 @@ void ImGui_ImplOvr_NewFrame(glm::mat4 guiModelMatrix)
 void ImGui_ImplOvr_Update()
 {
 	PulseIfItemHovered();
+
+	if (g_InputMode == ImGuiVrInputMode_Auto)
+	{
+		AutoDetectInputController();
+	}
 }
 
 /**
@@ -439,6 +494,30 @@ void ImGui_ImplOvr_SetControllerLineColor(glm::vec3 color)
 void ImGui_ImplOvr_SetPixelsPerUnit(float ppu)
 {
 	g_PixelsPerUnit = ppu;
+}
+
+/**
+ * @brief Set which hand should be used for GUI input.
+ * 
+ * @note Will not do anything if the current input mode is not ImGuiVrInputMode_OneHand
+ * 
+ * @param hand The hand to use
+ */
+void ImGui_ImplOvr_SetInputHand(ovrHandType hand)
+{
+	if (g_InputMode != ImGuiVrInputMode_OneHand) return;
+	
+	g_OVRInputHand = hand;
+}
+
+/**
+ * @brief Set which input mode should be used currently
+ * 
+ * @param mode The ImGuiVrInputMode to use
+ */
+void ImGui_ImplOvr_SetInputMode(ImGuiVrInputMode mode)
+{
+	g_InputMode = mode;
 }
 
 /**
