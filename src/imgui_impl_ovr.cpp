@@ -1,20 +1,19 @@
-#include "imgui_impl_ovr.h"
-#include <imgui.h>
-#include <glad/glad.h>
+// ImGui Renderer for: Oculus Rift CV1 with OpenGL3+
+// This needs to be used along with a Platform Binding (e.g. GLFW, SDL, Win32, custom..)
+// (Note: Glad is used as the OpenGL platform binding, but can be replaced with whatever works best for you)
 
-#include <glm/gtc/type_ptr.hpp>
+#include "imgui_impl_ovr.h"
+
+#include <imgui.h>
+#include <glad/glad.h> // OpenGL bindings
+
 #define GLM_ENABLE_EXPERIMENTAL
+#include <glm/gtc/type_ptr.hpp>
 #include <glm/gtx/intersect.hpp>
 #include <glm/gtx/string_cast.hpp>
-#include <LibOVR/OVR_CAPI.h>
-#include "VR.h"
-#include <iostream>
+#include <glm/gtc/matrix_transform.hpp>
 
-// TODO: remove dependency on VR.h
-
-// TODO: draw some kind of mouse pointer on the GUI FBO
-
-// TODO: pixels per unit to scale display
+#include <LibOVR/OVR_CAPI.h> // Oculus SDK
 
 // TODO: onscreen keyboard solution?
 
@@ -37,12 +36,23 @@ static GLuint g_GuiTexture = 0, g_GuiFBO = 0;
 // Handles of the GUI render quad VAO, VBO, and EBO
 static GLuint g_QuadVao = 0, g_QuadVbo = 0, g_QuadEbo = 0;
 
+// Handles of the controller pointer line VAO and VBO
 static GLuint g_LineVao = 0, g_LineVbo = 0;
 
+// Set to controller position on mouse position update (ImGui_ImplOvr_UpdateMousePos()).
+// Used for drawing controller pointer line.
 static glm::vec3 g_LineStart;
+
+// Set to GUI quad intersection point on mouse position update (ImGui_ImplOvr_UpdateMousePos()).
+// Used for drawing controller pointer line.
 static glm::vec3 g_LineEnd;
+
+// Set to true when the controller pointer is intersecting with the GUI quad. Used to enable/disable
+// controller pointer line rendering.
 static bool g_MouseOverUI = false;
 
+// RGB color used to set controller pointer line color as shader uniform.
+// User-configurable via ImGui_ImplOvr_SetControllerLineColor(glm::vec3 color).
 static glm::vec3 g_LineColor = { 1, 0, 0 };
 
 // const string indicating GLSL version to use for shaders
@@ -57,6 +67,7 @@ static int g_AttribLocationPosition = 0, g_AttribLocationUV = 0, g_AttribLocatio
 // GUI render quad uniform locations
 static int g_QuadAttribLocationTex = 0, g_QuadAttribLocationProjMtx = 0, g_QuadAttribLocationModelViewMtx = 0;
 
+// Controller pointer line uniform locations
 static int g_LineAttribLocationProjMtx = 0, g_LineAttribLocationViewMtx = 0, g_LineAttribLocationLineColor = 0;
 
 // ImGui GUI geometry VBO and EBO handles
@@ -66,6 +77,9 @@ static unsigned int g_VboHandle = 0, g_ElementsHandle = 0;
 // value of 800x600, but is user-configurable via ImGui_ImplOvr_SetVirtualCanvasSize(glm::ivec2 size).
 static glm::ivec2 g_VirtualCanvasSize = { 1600, 600 };
 
+// The amount of pixels per worldspace unit. This will affect how big the virtual canvas is rendered.
+// For example: a PPU value of 1000 will make a 1500x1000 size virtual canvas be 1.5x1.0 worldspace units.
+// Default value is 1000 but is user-configurable via ImGui_ImplOvr_SetPixelsPerUnit(float ppu).
 static float g_PixelsPerUnit = 1000;
 
 // An array containing the data to fill the GUI render quad vertex buffer with.
@@ -89,7 +103,17 @@ static GLuint g_QuadIndices[6] = { 1, 0, 2, 0, 3, 2 };
 // user-configurable via ImGui_ImplOvr_SetThumbstickDeadZone(float deadzone).
 static float g_ThumbstickDeadzone = 0.3f;
 
+// A buffer to store values for pulsing the held controller when a UI element is hovered over.
+// See: https://developer.oculus.com/documentation/pcsdk/latest/concepts/dg-input-touch-haptic/
 static ovrHapticsBuffer g_HapticPulseBuffer;
+
+// A pointer to the current frame index of the Oculus HMD. Should start at 0 and increment
+// each time a frame is rendered. Value is initialised in ImGui_ImplOvr_Init().
+// Required for Oculus API call to get tracking state.
+static long long* g_VRFrameIndex;
+
+// The current ovrSession of the Oculus API. Initialised in ImGui_ImplOvr_Init().
+static ovrSession g_VRSession;
 
 /**
  * @brief Maps an analog input with a lower and higher value to [0, 1]
@@ -107,10 +131,14 @@ static float ImGui_ImplOvr_MapAnalogInput(float v, float VL, float VH)
 	return glm::clamp(interpolated, 0.f, 1.f);
 }
 
+/**
+ * @brief Gets input state from Oculus API and uses it to update ImGui NavInputs for
+ * navigation.
+ */
 static void ImGui_ImplOvr_UpdateOculusTouchButtons()
 {
 	ovrInputState inputState;
-	ovr_GetInputState(VR::vrSession, ovrControllerType_Touch, &inputState);
+	ovr_GetInputState(g_VRSession, ovrControllerType_Touch, &inputState);
 
 	ImGuiIO& io = ImGui::GetIO();
 
@@ -134,16 +162,27 @@ static void ImGui_ImplOvr_UpdateOculusTouchButtons()
 	io.BackendFlags |= ImGuiBackendFlags_HasGamepad;
 }
 
+/**
+ * @brief Update the ImGui mouse position using Touch controller as pointer
+ * 
+ * Uses Oculus controller as a pointer and computes ray intersection with
+ * GUI quad virtual canvas, then calculates virtual canvas mouse position from
+ * this intersection point and submits it to ImGui.
+ * 
+ * @param guiModelMatrix The model matrix of the GUI quad
+ */
 static void ImGui_ImplOvr_UpdateMousePos(glm::mat4 guiModelMatrix)
 {
 	g_MouseOverUI = false;
 
+	// create vertices of GUI virtual canvas quad in local space
 	glm::vec3 p0(-1.f, -1.f, 0.f);
 	glm::vec3 p1(-1.f, 1.f, 0.f);
 	glm::vec3 p2(1.f, 1.f, 0.f);
 	glm::vec3 p3(1.f, -1.f, 0.f);
 
-	// apply scale to quad to make pixel size square
+	// apply scale to quad to make pixel size square, as well as model matrix to
+	// transform it into world space
 	const glm::mat4 modelMat = guiModelMatrix * glm::scale(glm::mat4(1),
 		glm::vec3(g_VirtualCanvasSize.x / g_PixelsPerUnit,
 			g_VirtualCanvasSize.y / g_PixelsPerUnit, 1.0f));
@@ -152,21 +191,22 @@ static void ImGui_ImplOvr_UpdateMousePos(glm::mat4 guiModelMatrix)
 	p2 = modelMat * glm::vec4(p2, 1);
 	p3 = modelMat * glm::vec4(p3, 1);
 
-	const double displayMidpointSeconds = ovr_GetPredictedDisplayTime(VR::vrSession, VR::frameIndex);
-	const ovrTrackingState trackState = ovr_GetTrackingState(VR::vrSession, displayMidpointSeconds, ovrTrue);
-
+	// get tracking data from Oculus API and convert to GLM values
+	const double displayMidpointSeconds = ovr_GetPredictedDisplayTime(g_VRSession, *g_VRFrameIndex);
+	const ovrTrackingState trackState = ovr_GetTrackingState(g_VRSession, displayMidpointSeconds, ovrTrue);
 	const ovrPosef handPose = trackState.HandPoses[0].ThePose;
-	glm::vec3 handPosition = glm::vec3(handPose.Position.x, handPose.Position.y, handPose.Position.z);
+	const glm::vec3 handPosition = glm::vec3(handPose.Position.x, handPose.Position.y, handPose.Position.z);
 	const glm::quat handOrientation = glm::quat(handPose.Orientation.w, handPose.Orientation.x, handPose.Orientation.y, handPose.Orientation.z);
 	const glm::vec3 handForward = handOrientation * glm::vec3(0, 0, -1);
 
-	handPosition -= handOrientation * glm::vec3(0.06f, 0, 0);
-
+	// find the inverse of the model matrix to get world-to-local matrix
 	const glm::mat4 toLocal = glm::inverse(modelMat);
 	const glm::vec3 start = glm::vec4(handPosition, 1);
 
 	g_LineStart = handPosition;
 
+	// now raycast from Touch controller in forward direction, looking for an
+	// intersection with the GUI virtual canvas quad
 	glm::vec2 b;
 	bool intersect;
 	float dist;
@@ -174,9 +214,11 @@ static void ImGui_ImplOvr_UpdateMousePos(glm::mat4 guiModelMatrix)
 	ImGuiIO& io = ImGui::GetIO();
 	do
 	{
+		// check for intersection with first triangle of quad
 		intersect = glm::intersectRayTriangle(start, handForward, p1, p0, p2, b, dist);
 		if (intersect) break;
 
+		// check for intersection with other triangle of quad
 		intersect = glm::intersectRayTriangle(start, handForward, p0, p3, p2, b, dist);
 		if (intersect) break;
 	}
@@ -184,13 +226,14 @@ static void ImGui_ImplOvr_UpdateMousePos(glm::mat4 guiModelMatrix)
 	
 	if (intersect)
 	{
-		
-		
+		// we found an intersection, the 'mouse' is over the UI
 		g_MouseOverUI = true;
 
+		// compute intersection point in worldspace
 		const glm::vec3 pt = start + handForward * dist;
 		g_LineEnd = pt;
 
+		// convert intersection point to local space
 		const glm::vec3 localPt = toLocal * glm::vec4(pt, 1);
 
 		// linearly interpolate between virtual canvas sizes based on UI quad local intersection position
@@ -202,16 +245,22 @@ static void ImGui_ImplOvr_UpdateMousePos(glm::mat4 guiModelMatrix)
 
 		io.MousePos = ImVec2(mousePos.x, mousePos.y);
 
+		// cache mouse position in case intersection stops next frame
 		mousePosLastFrame = mousePos;
 	}
 	else
 	{
+		// if no intersection, set the mouse position to the last known position
+		// otherwise mouse may 'jump' to an unexpected position
 		io.MousePos = ImVec2(mousePosLastFrame.x, mousePosLastFrame.y);
 	}
 }
 
-// adapted from:
-// https://github.com/temcgraw/ImguiVR/blob/master/imgui_impl_vr.cpp#L715-L729
+/**
+ * @brief If a UI element is hovered, trigger a haptic pulse.
+ * 
+ * @see https://github.com/temcgraw/ImguiVR/blob/master/imgui_impl_vr.cpp#L715-L729
+ */
 static void PulseIfItemHovered()
 {
 	static bool itemHoveredLastFrame = false;
@@ -220,11 +269,20 @@ static void PulseIfItemHovered()
 
 	if (itemHoveredLastFrame != itemHoveredThisFrame)
 	{
-		ovr_SubmitControllerVibration(VR::vrSession, ovrControllerType_LTouch, &g_HapticPulseBuffer);
+		ovr_SubmitControllerVibration(g_VRSession, ovrControllerType_LTouch, &g_HapticPulseBuffer);
 	}
 	itemHoveredLastFrame = itemHoveredThisFrame;
 }
 
+/**
+ * @brief Check to see if a shader has been compiled successfully.
+ * 
+ * Prints error message to stderr if unsuccessful.
+ * 
+ * @param handle The handle of the shader to check
+ * @param desc A short description of what the shader is to put in the error message
+ * @return True if success, false otherwise
+ */
 static bool CheckShader(GLuint handle, const char* desc)
 {
 	GLint status = 0, log_length = 0;
@@ -242,6 +300,15 @@ static bool CheckShader(GLuint handle, const char* desc)
 	return status == GL_TRUE;
 }
 
+/**
+ * @brief Check to see if a shader program has been linked successfully.
+ * 
+ * Prints error message to stderr if unsuccessful.
+ * 
+ * @param handle The handle of the program to check
+ * @param desc A short description of what the program is to put in the error message
+ * @return True if success, false otherwise
+ */
 static bool CheckProgram(GLuint handle, const char* desc)
 {
 	GLint status = 0, log_length = 0;
@@ -259,30 +326,50 @@ static bool CheckProgram(GLuint handle, const char* desc)
 	return status == GL_TRUE;
 }
 
-bool ImGui_ImplOvr_Init()
+/**
+ * @brief Initialise ImGui Oculus VR renderer. Must be called before any other ImGui_ImplOvr function.
+ * 
+ * @param session The ovrSession object from when you initialised the Oculus API.
+ * @param frameIndex A pointer to where you're storing the current VR frame index.
+ * @return True if successful initialisation, false otherwise.
+ */
+bool ImGui_ImplOvr_Init(ovrSession session, long long* const frameIndex)
 {
-	ImGuiIO& io = ImGui::GetIO();
-	// enable gamepad for Oculus Touch navigation
-	io.ConfigFlags |= ImGuiConfigFlags_NavEnableGamepad;
-
-	// HACK: create device objects here otherwise assertion will fail
-	// in imgui_impl_glfw::NewFrame()
-	ImGui_ImplOvr_CreateDeviceObjects();
+	if (!frameIndex) return false;
+	g_VRFrameIndex = frameIndex;
+	g_VRSession = session;
 
 	// create haptic pulse buffer
-	g_HapticPulseBuffer.Samples = new unsigned char[7] { 0, 255, 0, 255, 0, 255, 0 };
+	g_HapticPulseBuffer.Samples = new unsigned char[7]{ 0, 255, 0, 255, 0, 255, 0 };
 	g_HapticPulseBuffer.SamplesCount = 7;
 	g_HapticPulseBuffer.SubmitMode = ovrHapticsBufferSubmit_Enqueue;
+	
+	ImGuiIO& io = ImGui::GetIO();
+
+	// HACK: create device objects here otherwise assertion that font is already
+	// built will fail in ImGui platform binding Init (i.e. ImGui_Impl_Glfw_Init())
+	ImGui_ImplOvr_CreateDeviceObjects();
 
 	return true;
 }
 
+/**
+ * @brief Shutdown the ImGui Oculus VR renderer. Call this when your program exits, cleans up
+ * OpenGL objects and deletes allocated memory.
+ */
 void ImGui_ImplOvr_Shutdown()
 {
 	ImGui_ImplOvr_DestroyDeviceObjects();
 	delete[] static_cast<unsigned char const*>(g_HapticPulseBuffer.Samples);
 }
 
+/**
+ * @brief Begin a new frame with this renderer. Call this before you begin drawing
+ * ImGui elements, and before ImGui::NewFrame().
+ * 
+ * @param guiModelMatrix The model matrix of the quad to draw the GUI on in the scene. Used for
+ * intersection calculations to determine mouse position.
+ */
 void ImGui_ImplOvr_NewFrame(glm::mat4 guiModelMatrix)
 {
 	ImGuiIO& io = ImGui::GetIO();
@@ -300,22 +387,65 @@ void ImGui_ImplOvr_NewFrame(glm::mat4 guiModelMatrix)
 	ImGui_ImplOvr_UpdateOculusTouchButtons();
 }
 
+/**
+ * @brief Call this every engine tick, will update internal state and do things
+ * like pulse the Touch controller if a UI element is hovered over.
+ */
 void ImGui_ImplOvr_Update()
 {
 	PulseIfItemHovered();
 }
 
+/**
+ * @brief Set the size of the virtual GUI canvas in pixels. Call this before ImGui_ImplOvr_Init() if you
+ * want canvas size changes to have any effect.
+ * 
+ * @param size The size in pixels of the virtual canvas.
+ */
 void ImGui_ImplOvr_SetVirtualCanvasSize(glm::ivec2 size)
 {
 	g_VirtualCanvasSize = size;
 }
 
-
+/**
+ * @brief Set the deadzone of the Oculus Touch thumbstick.
+ * 
+ * @param deadzone The deadzone.
+ */
 void ImGui_ImplOvr_SetThumbstickDeadzone(float deadzone)
 {
 	g_ThumbstickDeadzone = deadzone;
 }
 
+/**
+ * @brief Set the color of the line drawn from the Touch controller (indicating 'mouse' position on UI).
+ * 
+ * @param color RGB vector color to set
+ */
+void ImGui_ImplOvr_SetControllerLineColor(glm::vec3 color)
+{
+	g_LineColor = color;
+}
+
+/**
+ * @brief Set the pixels-per-unit (ppu) scale of the virtual canvas. Affects the rendered size of the
+ * GUI virtual canvas quad. Denotes how many pixels occupy each world-space unit.
+ * 
+ * For example: a PPU of 1000 with a virtual canvas size of 1500x500px would make a quad size of
+ * 1.5x0.5 units.
+ * 
+ * @param ppu The pixels-per-unit scale to set
+ */
+void ImGui_ImplOvr_SetPixelsPerUnit(float ppu)
+{
+	g_PixelsPerUnit = ppu;
+}
+
+/**
+ * @brief Creates a texture for the currently in-use ImGui font.
+ * 
+ * @return True
+ */
 bool ImGui_ImplOvr_CreateFontsTexture()
 {
 	// Build texture atlas
@@ -343,6 +473,9 @@ bool ImGui_ImplOvr_CreateFontsTexture()
 	return true;
 }
 
+/**
+ * @brief Destroys the created ImGui font texture.
+ */
 void ImGui_ImplOvr_DestroyFontsTexture()
 {
 	if (g_FontTexture)
@@ -354,6 +487,11 @@ void ImGui_ImplOvr_DestroyFontsTexture()
 	}
 }
 
+/**
+ * @brief Creates all necessary OpenGL objects for rendering the GUI in VR.
+ * 
+ * @return True
+ */
 bool ImGui_ImplOvr_CreateDeviceObjects()
 {
 	// Backup GL state
@@ -541,6 +679,9 @@ bool ImGui_ImplOvr_CreateDeviceObjects()
 	return true;
 }
 
+/**
+ * @brief Destroys OpenGL state created on Initialise.
+ */
 void ImGui_ImplOvr_DestroyDeviceObjects()
 {
 	if (g_VboHandle) glDeleteBuffers(1, &g_VboHandle);
@@ -601,6 +742,12 @@ void ImGui_ImplOvr_DestroyDeviceObjects()
 	ImGui_ImplOvr_DestroyFontsTexture();
 }
 
+/**
+ * @brief Renders ImGui draw data on the virtual canvas.
+ * Call this after ImGui::Render() when you want your GUI to be rendered.
+ * 
+ * @param draw_data The ImGui draw data to render.
+ */
 void ImGui_ImplOvr_RenderDrawData(ImDrawData * draw_data)
 {
 	// Avoid rendering when minimized, scale coordinates for retina displays (screen coordinates != framebuffer coordinates)
@@ -680,9 +827,7 @@ void ImGui_ImplOvr_RenderDrawData(ImDrawData * draw_data)
 	glVertexAttribPointer(g_AttribLocationUV, 2, GL_FLOAT, GL_FALSE, sizeof(ImDrawVert), (GLvoid*)IM_OFFSETOF(ImDrawVert, uv));
 	glVertexAttribPointer(g_AttribLocationColor, 4, GL_UNSIGNED_BYTE, GL_TRUE, sizeof(ImDrawVert), (GLvoid*)IM_OFFSETOF(ImDrawVert, col));
 
-	glClearColor(0.2f, 0.2f, 0.2f, 1);
 	glClear(GL_COLOR_BUFFER_BIT);
-	glClearColor(0, 0, 0, 1);
 
 	// Draw
 	ImVec2 pos = draw_data->DisplayPos;
@@ -742,6 +887,14 @@ void ImGui_ImplOvr_RenderDrawData(ImDrawData * draw_data)
 	glBindFramebuffer(GL_FRAMEBUFFER, last_framebuffer);
 }
 
+/**
+ * @brief Renders the GUI virtual canvas quad. Call this when you're rendering your VR scene
+ * and make sure that it gets rendered as any other geometry would in VR (i.e. by both eyes).
+ * 
+ * @param proj The projection matrix
+ * @param view The view matrix
+ * @param model The model matrix of the GUI quad. Use this to move it around to wherever you want it.
+ */
 void ImGui_ImplOvr_RenderGUIQuad(glm::mat4 proj, glm::mat4 view, glm::mat4 model)
 {
 	// Backup GL state
@@ -764,7 +917,7 @@ void ImGui_ImplOvr_RenderGUIQuad(glm::mat4 proj, glm::mat4 view, glm::mat4 model
 	// Setup render state: alpha-blending enabled, no face culling, polygon fill
 	glEnable(GL_BLEND);
 	glBlendEquation(GL_FUNC_ADD);
-	glBlendFunc(GL_SRC_ALPHA, GL_ZERO);
+	glBlendFunc(GL_SRC_ALPHA, GL_ONE_MINUS_SRC_ALPHA);
 	glDisable(GL_CULL_FACE);
 	glPolygonMode(GL_FRONT_AND_BACK, GL_FILL);
 
@@ -794,6 +947,17 @@ void ImGui_ImplOvr_RenderGUIQuad(glm::mat4 proj, glm::mat4 view, glm::mat4 model
 	glBlendFuncSeparate(last_blend_src_rgb, last_blend_dst_rgb, last_blend_src_alpha, last_blend_dst_alpha);
 }
 
+/**
+ * @brief Render the line from the Touch controller along its forward axis. Used for
+ * aiming the 'mouse' pointer to select elements on the virtual canvas.
+ * Like ImGui_ImplOvr_RenderGUIQuad() this should be rendered when you render your
+ * VR scene.
+ * 
+ * @note Will only be rendered if the controller is pointed at the virtual canvas.
+ * 
+ * @param proj The projection matrix
+ * @param view The view matrix
+ */
 void ImGui_ImplOvr_RenderControllerLine(glm::mat4 proj, glm::mat4 view)
 {
 	if (!g_MouseOverUI) return;
@@ -805,7 +969,7 @@ void ImGui_ImplOvr_RenderControllerLine(glm::mat4 proj, glm::mat4 view)
 
 	GLfloat lineVerts[6] = { g_LineStart.x, g_LineStart.y, g_LineStart.z, g_LineEnd.x, g_LineEnd.y, g_LineEnd.z };
 
-	//glDisable(GL_DEPTH_TEST);
+	glDisable(GL_DEPTH_TEST);
 
 	glGenVertexArrays(1, &g_LineVao);
 	glBindVertexArray(g_LineVao);
@@ -829,4 +993,3 @@ void ImGui_ImplOvr_RenderControllerLine(glm::mat4 proj, glm::mat4 view)
 	glBindBuffer(GL_ARRAY_BUFFER, last_array_buffer);
 	if (last_enable_depth_test) glEnable(GL_DEPTH_TEST); else glDisable(GL_DEPTH_TEST);
 }
-

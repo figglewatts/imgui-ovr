@@ -1,13 +1,9 @@
 #include "GL.h"
 
 #include <iostream>
-#include <vector>
-#include <glm/gtc/matrix_transform.hpp>
-#include "VAO.h"
-#include "Shader.h"
+#include "Camera.h"
 #include "imgui.h"
 #include "VR.h"
-#include "Camera.h"
 #include "imgui_impl_ovr.h"
 #include "imgui_impl_glfw.h"
 
@@ -19,29 +15,13 @@ const size_t GL_VER_MINOR = 3;
 const float FOV_DEGREES = 60;
 const float Z_NEAR = 0.1f;
 const float Z_FAR = 100;
-const char* glsl_version = "#version 330 core";
 
 // GLOBAL VARIABLES
 GLFWwindow* pWindow;
 glm::mat4 uiModelMatrix;
-char buf[256];
-float f;
-
-// vao
-std::vector<Vertex> verts = 
-{
-	Vertex(glm::vec3(-0.1f, -0.1f, 0), glm::vec3(), glm::vec2(), glm::vec4(1, 0, 0, 1)),
-	Vertex(glm::vec3(0.1f, -0.1f, 0), glm::vec3(), glm::vec2(), glm::vec4(0, 1, 0, 1)),
-	Vertex(glm::vec3(0, 0.1f, 0), glm::vec3(), glm::vec2(), glm::vec4(0, 0, 1, 1))
-};
-std::vector<unsigned> indices = { 0, 1, 2 };
-VAO* pVAO;
-
-Shader *pShader;
 
 // camera matrix, translated along z-axis for zoom back
 Camera camera;
-
 
 // END GLOBAL VARIABLES
 
@@ -123,14 +103,10 @@ void init_imgui()
 	style->GrabMinSize = 30.f; // make sure grab section doesn't get too thin
 
 
-	ImGui_ImplGlfw_InitForOpenGL(pWindow, false);
-	ImGui_ImplOvr_Init();
-}
+	
+	ImGui_ImplOvr_Init(VR::vrSession, &VR::frameIndex);
 
-void load_data()
-{
-	pVAO = new VAO(verts, indices);
-	pShader = new Shader("basic", "shaders/basic");
+	ImGui_ImplGlfw_InitForOpenGL(pWindow, false);
 }
 
 void process_input()
@@ -141,26 +117,12 @@ void process_input()
 
 void render()
 {
-	/*pShader->bind();
-	pShader->setUniform("ModelViewMatrix", VR::currentView, false);
-	pShader->setUniform("ProjectionMatrix", VR::currentProjection, false);
-	pVAO->render();
-	pShader->unbind();*/
-
 	ImGui_ImplOvr_RenderGUIQuad(VR::currentProjection, VR::currentView, uiModelMatrix);
 	ImGui_ImplOvr_RenderControllerLine(VR::currentProjection, VR::currentView);
 }
 
 void render_gui()
 {
-	/*ImGui::Text("Hello, world %d", 123);
-	if (ImGui::Button("Save"))
-	{
-		std::cout << "Saving!!" << std::endl;
-	}
-	ImGui::InputText("string", buf, IM_ARRAYSIZE(buf));
-	ImGui::SliderFloat("float", &f, 0.0f, 1.0f);*/
-
 	ImGui::ShowTestWindow();
 }
 
@@ -216,7 +178,6 @@ int main()
 	VR::pCamera = &camera;
 
 	init_imgui();
-	load_data();
 
 	camera.pos.z = 0.1f;
 
