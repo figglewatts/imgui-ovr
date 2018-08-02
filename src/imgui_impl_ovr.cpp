@@ -18,8 +18,6 @@
 
 // TODO: onscreen keyboard solution?
 
-// TODO: set left/right controller
-
 // Handle of the texture used for fonts
 static GLuint g_FontTexture = 0;
 
